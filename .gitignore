@@ -1,0 +1,79 @@
+# Built application files
+*.apk
+*.aar
+*.aab
+*.ap_
+*.dex
+
+# Files for the ART/Dalvik VM
+*.class
+
+# Java / JVM crash logs
+hs_err_pid*
+replay_pid*
+
+# Gradle files and cache
+.gradle/
+build/
+*/build/
+app/build/
+.kotlin/
+
+# Local configuration file (sdk.dir, local properties)
+local.properties
+*.local.properties
+
+# Log files
+*.log
+*.stackdump
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.shelf/
+Captures/
+.externalNativeBuild/
+.cxx/
+
+# VS Code
+.vscode/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Signing & Keystore credentials (NEVER commit secrets or release signing keys)
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.cer
+*.crt
+*.p8
+*.mobileprovision
+signing.properties
+keystore.properties
+
+# Environment and Secret files
+.env
+.env.*
+*.env
+
+# Google Services / Firebase / Cloud Service Account credentials
+google-services.json
+*service-account*.json
+*firebase*.json
+google-services/
+
+# Android profiling & memory dumps
+*.hprof
