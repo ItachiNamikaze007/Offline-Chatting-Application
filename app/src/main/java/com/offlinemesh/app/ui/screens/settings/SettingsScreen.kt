@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.offlinemesh.app.ui.components.AvatarBadge
+import com.offlinemesh.app.ui.components.GrayBrandLogo
 import com.offlinemesh.app.ui.components.OFCBadge
 import com.offlinemesh.app.ui.theme.MeshCyan
 import com.offlinemesh.app.ui.theme.MeshEmerald
@@ -268,7 +269,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "OfflineMesh Protocol Guarantees",
+                            text = "GRAY Protocol Guarantees",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -277,10 +278,10 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     val items = listOf(
-                        "Zero Server / Cloud Dependencies" to "Messages and identities never touch a centralized server or Firebase.",
+                        "Zero Server / Cloud Dependencies" to "Messages and identities never touch a centralized server or cloud.",
                         "Hardware-Backed KeyStore" to "Private signing keys are held inside the Android secure enclave (TEE/StrongBox).",
                         "Phone Numbers Never Used" to "No phone number, email, or SIM identity is required or transmitted.",
-                        "Future Mesh Routing Ready" to "Protocol packets support TTL, hopCount, and cryptographic message deduplication."
+                        "Direct Radio Mesh Routing" to "Protocol packets support multi-hop TTL, flooding routing, and cryptographic message deduplication."
                     )
 
                     items.forEach { (title, desc) ->
@@ -298,6 +299,39 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // About GRAY Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    GrayBrandLogo(
+                        logoSize = 80.dp,
+                        wordmarkSize = 22,
+                        subtitle = "Decentralized Off-Grid Mesh Protocol",
+                        showGlowBorder = false
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Version 1.0.0 • 2026 Edition",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

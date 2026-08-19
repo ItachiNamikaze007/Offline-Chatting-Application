@@ -17,6 +17,9 @@ import com.offlinemesh.app.ui.viewmodel.SettingsViewModel
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
+import com.offlinemesh.app.ui.screens.splash.SplashScreen
+import com.offlinemesh.app.ui.screens.welcome.WelcomeScreen
+
 @Composable
 fun AppNavigation(
     container: AppContainer
@@ -55,8 +58,29 @@ fun AppNavigation(
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = Screen.Splash.route
     ) {
+        composable(Screen.Splash.route) {
+            SplashScreen(
+                onSplashFinished = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Welcome.route) {
+            WelcomeScreen(
+                settingsViewModel = settingsViewModel,
+                onEnterApp = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.Home.route) {
             HomeScreen(
                 homeViewModel = homeViewModel,
@@ -66,6 +90,9 @@ fun AppNavigation(
                     navController.navigate(
                         Screen.ChatDetail.createRoute(conversationId, peerName, avatarColor)
                     )
+                },
+                onNavigateToWelcome = {
+                    navController.navigate(Screen.Welcome.route)
                 }
             )
         }

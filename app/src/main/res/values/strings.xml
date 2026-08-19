@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">OfflineMesh</string>
+    <string name="app_name">GRAY</string>
+    <string name="brand_wordmark">GRAY</string>
+    <string name="brand_tagline">Decentralized Off-Grid Mesh Protocol</string>
 </resources>

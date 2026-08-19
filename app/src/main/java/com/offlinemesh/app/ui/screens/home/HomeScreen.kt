@@ -70,12 +70,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.offlinemesh.app.ui.components.GrayHeaderBrand
+
 @Composable
 fun HomeScreen(
     homeViewModel: HomeViewModel,
     nearbyViewModel: NearbyViewModel,
     settingsViewModel: SettingsViewModel,
-    onNavigateToChat: (conversationId: String, peerName: String, avatarColor: String?) -> Unit
+    onNavigateToChat: (conversationId: String, peerName: String, avatarColor: String?) -> Unit,
+    onNavigateToWelcome: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -223,21 +226,10 @@ private fun ChatsTabContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "OfflineMesh",
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = (-0.5).sp
-                            ),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            text = "Zero-Internet P2P Radio Messaging",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    GrayHeaderBrand(
+                        logoSize = 40.dp,
+                        subtitle = "Zero-Internet P2P Radio Mesh"
+                    )
 
                     // Live Nearby Active Badge
                     Box(
