@@ -5,10 +5,11 @@ import java.util.LinkedHashMap
 
 /**
  * Thread-safe LRU Cache for packet deduplication.
- * Prevents redundant packet processing or infinite loops in mesh topologies.
+ * Prevents redundant packet processing and infinite loops in mesh topologies.
  */
 class MessageDeduplicator(
-    private val maxCacheSize: Int = 2000
+    private val maxCacheSize: Int = 3000,
+    private val entryExpiryMillis: Long = 10 * 60 * 1000L // 10 minutes retention
 ) {
     private val seenPacketIds = Collections.synchronizedMap(
         object : LinkedHashMap<String, Long>(maxCacheSize, 0.75f, true) {
@@ -20,29 +21,41 @@ class MessageDeduplicator(
 
     /**
      * Checks if a packet is a duplicate.
-     * If not seen before, records the packetId and returns false.
-     * If already seen, returns true.
+     * If not seen before (or expired), records the packetId and returns false.
+     * If already seen within the expiration window, returns true.
      */
     fun isDuplicate(packetId: String): Boolean {
+        val now = System.currentTimeMillis()
         synchronized(seenPacketIds) {
-            if (seenPacketIds.containsKey(packetId)) {
+            val lastSeen = seenPacketIds[packetId]
+            if (lastSeen != null && (now - lastSeen) < entryExpiryMillis) {
                 return true
             }
-            seenPacketIds[packetId] = System.currentTimeMillis()
+            seenPacketIds[packetId] = now
             return false
         }
     }
 
     /**
-     * Checks whether a packet has been seen without marking it as seen.
+     * Checks whether a packet has been seen without updating its last seen time.
      */
     fun hasSeen(packetId: String): Boolean {
-        return seenPacketIds.containsKey(packetId)
+        val now = System.currentTimeMillis()
+        synchronized(seenPacketIds) {
+            val lastSeen = seenPacketIds[packetId] ?: return false
+            return (now - lastSeen) < entryExpiryMillis
+        }
     }
 
+    /**
+     * Clears all cached entries.
+     */
     fun clear() {
         seenPacketIds.clear()
     }
 
+    /**
+     * Returns the current number of cached entries.
+     */
     fun size(): Int = seenPacketIds.size
 }

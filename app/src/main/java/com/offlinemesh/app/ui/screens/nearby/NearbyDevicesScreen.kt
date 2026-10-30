@@ -463,6 +463,7 @@ private fun KnownContactCard(
             AvatarBadge(
                 name = contact.displayName,
                 avatarColorHex = contact.avatarColorHex,
+                imagePath = contact.avatarImagePath,
                 size = 40.dp,
                 isOnline = isConnected
             )

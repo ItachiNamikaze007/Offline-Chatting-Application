@@ -1,7 +1,17 @@
 package com.offlinemesh.app.ui.screens.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,28 +33,58 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.offlinemesh.app.core.model.DeliveryStatus
@@ -57,9 +97,14 @@ import com.offlinemesh.app.ui.theme.MeshEmerald
 import com.offlinemesh.app.ui.theme.MeshIndigo
 import com.offlinemesh.app.ui.theme.MeshRose
 import com.offlinemesh.app.ui.viewmodel.ChatViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+import androidx.compose.runtime.DisposableEffect
+import com.offlinemesh.app.core.notification.ActiveConversationTracker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,18 +112,58 @@ fun ChatDetailScreen(
     viewModel: ChatViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val messages by viewModel.messages.collectAsState()
     val inputText by viewModel.inputText.collectAsState()
+    val peerEntity by viewModel.peerEntity.collectAsState()
     val isConnected by viewModel.isPeerConnected.collectAsState()
+    val replyingTo by viewModel.replyingTo.collectAsState()
+    val toastMessage by viewModel.toastMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    DisposableEffect(viewModel.conversationId) {
+        ActiveConversationTracker.setActiveConversation(viewModel.conversationId)
+        onDispose {
+            ActiveConversationTracker.setActiveConversation(null)
+        }
+    }
+
     val listState = rememberLazyListState()
+    val isAtBottom by remember {
+        derivedStateOf {
+            val totalItems = listState.layoutInfo.totalItemsCount
+            if (totalItems == 0) true
+            else {
+                val lastVisibleItemIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                lastVisibleItemIndex >= totalItems - 2
+            }
+        }
+    }
+
+    var selectedMessageForMenu by remember { mutableStateOf<MessageEntity?>(null) }
+    var highlightedMessageId by remember { mutableStateOf<String?>(null) }
+    var showTopMenu by remember { mutableStateOf(false) }
+    var showDeleteConversationDialog by remember { mutableStateOf(false) }
+
+    val hopCount = remember(isConnected) { viewModel.getMeshHopDistance() }
+
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearToast()
+        }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
+            viewModel.markAsRead()
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -88,6 +173,7 @@ fun ChatDetailScreen(
                         AvatarBadge(
                             name = viewModel.peerName,
                             avatarColorHex = viewModel.peerAvatarColor,
+                            imagePath = peerEntity?.avatarImagePath,
                             size = 38.dp,
                             isOnline = isConnected
                         )
@@ -96,20 +182,32 @@ fun ChatDetailScreen(
                             Text(
                                 text = viewModel.peerName,
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val statusColor = when {
+                                    isConnected -> MeshEmerald
+                                    hopCount != null && hopCount > 1 -> MeshCyan
+                                    else -> Color.Gray
+                                }
+                                val statusText = when {
+                                    isConnected -> "Direct Radio Connected"
+                                    hopCount != null && hopCount > 1 -> "Mesh Reachable ($hopCount hops)"
+                                    else -> "Offline / Queued"
+                                }
                                 Box(
                                     modifier = Modifier
                                         .size(6.dp)
                                         .clip(CircleShape)
-                                        .background(if (isConnected) MeshEmerald else Color.Gray)
+                                        .background(statusColor)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isConnected) "Direct Radio Connected" else "Offline / Out of range",
+                                    text = statusText,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (isConnected) MeshEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = statusColor
                                 )
                             }
                         }
@@ -120,6 +218,48 @@ fun ChatDetailScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showTopMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                    }
+                    DropdownMenu(
+                        expanded = showTopMenu,
+                        onDismissRequest = { showTopMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Copy OFC ID") },
+                            leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("OFC ID", viewModel.conversationId))
+                                scope.launch { snackbarHostState.showSnackbar("OFC ID copied to clipboard") }
+                                showTopMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Share Contact ID") },
+                            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                            onClick = {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "OfflineMesh Contact")
+                                    putExtra(Intent.EXTRA_TEXT, "OfflineMesh Contact: ${viewModel.peerName} (${viewModel.conversationId})")
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Share Contact ID"))
+                                showTopMenu = false
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Delete Conversation", color = MeshRose) },
+                            leadingIcon = { Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = MeshRose) },
+                            onClick = {
+                                showTopMenu = false
+                                showDeleteConversationDialog = true
+                            }
                         )
                     }
                 },
@@ -138,7 +278,7 @@ fun ChatDetailScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .imePadding()
         ) {
-            // Messages List
+            // Messages List Box
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -148,7 +288,7 @@ fun ChatDetailScreen(
                     EmptyStateView(
                         icon = Icons.AutoMirrored.Filled.Send,
                         title = "Start Offline Conversation",
-                        subtitle = "Send a message to ${viewModel.peerName}. Messages are saved locally and delivered over Nearby Radio.",
+                        subtitle = "Send an end-to-end encrypted message to ${viewModel.peerName}. Messages traverse nearby mesh radios without internet.",
                         modifier = Modifier.align(Alignment.Center)
                     )
                 } else {
@@ -164,7 +304,107 @@ fun ChatDetailScreen(
                         ) { message ->
                             MessageBubble(
                                 message = message,
-                                onRetry = { viewModel.retryMessage(message.messageId) }
+                                isHighlighted = message.messageId == highlightedMessageId,
+                                peerAvatarImagePath = peerEntity?.avatarImagePath,
+                                onLongClick = { selectedMessageForMenu = message },
+                                onRetry = { viewModel.retryMessage(message.messageId) },
+                                onQuotedClick = { targetMsgId ->
+                                    val index = messages.indexOfFirst { it.messageId == targetMsgId }
+                                    if (index >= 0) {
+                                        scope.launch {
+                                            listState.animateScrollToItem(index)
+                                            highlightedMessageId = targetMsgId
+                                            delay(1500)
+                                            if (highlightedMessageId == targetMsgId) {
+                                                highlightedMessageId = null
+                                            }
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Original message unavailable.")
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Jump to Bottom Floating Button
+                if (!isAtBottom && messages.isNotEmpty()) {
+                    FloatingActionButton(
+                        onClick = {
+                            scope.launch {
+                                listState.animateScrollToItem(messages.size - 1)
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .size(40.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        elevation = FloatingActionButtonDefaults.elevation(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Scroll to bottom",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // Compact Quoted Reply Preview Bar
+            replyingTo?.let { replyTarget ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MeshCyan)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Reply,
+                            contentDescription = null,
+                            tint = MeshCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Replying to ${replyTarget.senderName}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MeshCyan
+                            )
+                            Text(
+                                text = replyTarget.content,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.setReplyingTo(null) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Cancel reply",
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -206,21 +446,23 @@ fun ChatDetailScreen(
                         )
                     )
 
+                    val isSendEnabled = inputText.trim().isNotEmpty()
+
                     IconButton(
                         onClick = { viewModel.sendMessage() },
-                        enabled = inputText.trim().isNotEmpty(),
+                        enabled = isSendEnabled,
                         modifier = Modifier
                             .size(46.dp)
                             .clip(CircleShape)
                             .background(
-                                if (inputText.trim().isNotEmpty()) MeshCyan
+                                if (isSendEnabled) MeshCyan
                                 else MaterialTheme.colorScheme.surfaceVariant
                             )
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
-                            tint = if (inputText.trim().isNotEmpty()) Color.Black else Color.Gray,
+                            tint = if (isSendEnabled) Color.Black else Color.Gray,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -228,12 +470,155 @@ fun ChatDetailScreen(
             }
         }
     }
+
+    // Message Context Bottom Sheet on Long Press
+    selectedMessageForMenu?.let { message ->
+        ModalBottomSheet(
+            onDismissRequest = { selectedMessageForMenu = null },
+            sheetState = rememberModalBottomSheetState()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "Message Options",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                // Reply
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.setReplyingTo(message)
+                            selectedMessageForMenu = null
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = MeshCyan)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Reply", style = MaterialTheme.typography.bodyLarge)
+                }
+
+                // Copy
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Message", message.content))
+                            scope.launch { snackbarHostState.showSnackbar("Message copied") }
+                            selectedMessageForMenu = null
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MeshCyan)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Copy Text", style = MaterialTheme.typography.bodyLarge)
+                }
+
+                // Star / Unstar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.toggleStar(message)
+                            selectedMessageForMenu = null
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (message.isStarred) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = null,
+                        tint = MeshCyan
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(if (message.isStarred) "Unstar Message" else "Star Message", style = MaterialTheme.typography.bodyLarge)
+                }
+
+                // Retry (if failed)
+                if (message.isOutgoing && message.status == DeliveryStatus.FAILED) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.retryMessage(message.messageId)
+                                selectedMessageForMenu = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Replay, contentDescription = null, tint = MeshEmerald)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Retry Send", style = MaterialTheme.typography.bodyLarge, color = MeshEmerald)
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // Delete for me
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.deleteMessage(message.messageId)
+                            selectedMessageForMenu = null
+                        }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, tint = MeshRose)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Delete for me", style = MaterialTheme.typography.bodyLarge, color = MeshRose)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
+    // Delete Conversation Confirmation Dialog
+    if (showDeleteConversationDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConversationDialog = false },
+            title = { Text("Delete entire conversation?") },
+            text = { Text("All messages with ${viewModel.peerName} will be deleted permanently from this device.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteConversation()
+                        showDeleteConversationDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MeshRose)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConversationDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     message: MessageEntity,
-    onRetry: () -> Unit
+    isHighlighted: Boolean = false,
+    peerAvatarImagePath: String? = null,
+    onLongClick: () -> Unit,
+    onRetry: () -> Unit,
+    onQuotedClick: (messageId: String) -> Unit = {}
 ) {
     val isOutgoing = message.isOutgoing
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -258,14 +643,83 @@ private fun MessageBubble(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment
     ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .clip(bubbleShape)
-                .background(bubbleBackground)
-                .clickable(enabled = message.status == DeliveryStatus.FAILED) { onRetry() }
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = if (isOutgoing) Arrangement.End else Arrangement.Start
         ) {
+            if (!isOutgoing) {
+                AvatarBadge(
+                    name = message.senderName,
+                    avatarColorHex = null,
+                    imagePath = peerAvatarImagePath,
+                    size = 28.dp,
+                    modifier = Modifier.padding(end = 6.dp, bottom = 2.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .clip(bubbleShape)
+                    .background(bubbleBackground)
+                    .then(
+                        if (isHighlighted) {
+                            Modifier.border(2.dp, MeshCyan, bubbleShape)
+                        } else Modifier
+                    )
+                    .combinedClickable(
+                        onClick = {
+                            if (message.status == DeliveryStatus.FAILED) onRetry()
+                        },
+                        onLongClick = onLongClick
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+            // Replying Quote Header Card
+            if (message.replyToMessageId != null || message.replyToPreview != null) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clickable {
+                            message.replyToMessageId?.let { onQuotedClick(it) }
+                        },
+                    shape = RoundedCornerShape(8.dp),
+                    color = (if (isOutgoing) Color.Black else MaterialTheme.colorScheme.surface).copy(alpha = 0.3f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MeshCyan)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = message.replyToSenderName ?: "Quoted Message",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                                color = MeshCyan
+                            )
+                            Text(
+                                text = message.replyToPreview ?: "Original message unavailable.",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = if (isOutgoing) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Multi-Hop Relay Header
             if (!isOutgoing && message.hopCount > 0) {
                 Text(
                     text = "Via Relay (${message.hopCount} hops)",
@@ -275,6 +729,7 @@ private fun MessageBubble(
                 )
             }
 
+            // Message Plaintext
             Text(
                 text = message.content,
                 style = MaterialTheme.typography.bodyLarge,
@@ -283,10 +738,22 @@ private fun MessageBubble(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            // Footer (Time, Star, Delivery Status Icon)
             Row(
                 modifier = Modifier.align(Alignment.End),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (message.isStarred) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Starred",
+                        tint = if (isOutgoing) Color.Yellow else MeshCyan,
+                        modifier = Modifier
+                            .size(12.dp)
+                            .padding(end = 2.dp)
+                    )
+                }
+
                 Text(
                     text = formattedTime,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -309,3 +776,6 @@ private fun MessageBubble(
         }
     }
 }
+}
+
+

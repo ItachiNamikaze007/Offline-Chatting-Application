@@ -18,7 +18,7 @@ import com.offlinemesh.app.data.local.entity.PeerEntity
         PeerEntity::class,
         CommunityEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

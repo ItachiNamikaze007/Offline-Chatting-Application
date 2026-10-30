@@ -26,5 +26,12 @@ data class MessageEntity(
     val status: DeliveryStatus,          // PENDING, SENDING, SENT, DELIVERED, FAILED
     val isOutgoing: Boolean,             // True if sent by local user
     val hopCount: Int = 0,               // Hops traversed (0 for direct 1-hop)
-    val signature: String? = null        // Cryptographic signature
+    val signature: String? = null,       // Cryptographic signature
+    val isRead: Boolean = true,          // False for incoming unread messages
+    val isStarred: Boolean = false,      // Favorited message
+    val replyToMessageId: String? = null,
+    val replyToSenderId: String? = null,
+    val replyToSenderName: String? = null,
+    val replyToPreview: String? = null,
+    val replyToMessageType: String? = null
 )

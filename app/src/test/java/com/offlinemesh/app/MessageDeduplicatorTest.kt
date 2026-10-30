@@ -2,8 +2,13 @@ package com.offlinemesh.app
 
 import com.google.common.truth.Truth.assertThat
 import com.offlinemesh.app.domain.mesh.MessageDeduplicator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 class MessageDeduplicatorTest {
 
@@ -52,5 +57,30 @@ class MessageDeduplicatorTest {
         assertThat(deduplicator.hasSeen(id3)).isTrue()
         assertThat(deduplicator.hasSeen(id2)).isTrue()
         assertThat(deduplicator.hasSeen(id1)).isFalse()
+    }
+
+    @Test
+    fun deduplicator_concurrentAccess_isThreadSafeAndAccurate() = runBlocking {
+        val deduplicator = MessageDeduplicator(maxCacheSize = 2000)
+        val acceptedCount = AtomicInteger(0)
+        val duplicateCount = AtomicInteger(0)
+
+        val packetId = UUID.randomUUID().toString()
+
+        // Launch 50 concurrent coroutines attempting to process the SAME packetId simultaneously
+        val jobs = (1..50).map {
+            async(Dispatchers.Default) {
+                if (deduplicator.isDuplicate(packetId)) {
+                    duplicateCount.incrementAndGet()
+                } else {
+                    acceptedCount.incrementAndGet()
+                }
+            }
+        }
+        jobs.awaitAll()
+
+        // Exactly one thread must succeed in being first (not duplicate), and 49 must be marked duplicate
+        assertThat(acceptedCount.get()).isEqualTo(1)
+        assertThat(duplicateCount.get()).isEqualTo(49)
     }
 }

@@ -147,6 +147,7 @@ fun WelcomeScreen(
                     AvatarBadge(
                         name = displayName.ifEmpty { "User" },
                         avatarColorHex = selectedColor,
+                        imagePath = identity?.avatarImagePath,
                         size = 52.dp
                     )
                     Spacer(modifier = Modifier.width(14.dp))

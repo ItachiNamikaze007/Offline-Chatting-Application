@@ -64,8 +64,8 @@ class NearbyConnectionsTransport(
     private val _connectedPeers = MutableStateFlow<List<PeerDevice>>(emptyList())
     override val connectedPeers: StateFlow<List<PeerDevice>> = _connectedPeers.asStateFlow()
 
-    private val _incomingPackets = MutableSharedFlow<ProtocolPacket>(extraBufferCapacity = 128)
-    override val incomingPackets: SharedFlow<ProtocolPacket> = _incomingPackets.asSharedFlow()
+    private val _incomingPackets = MutableSharedFlow<com.offlinemesh.app.data.transport.TransportPacket>(extraBufferCapacity = 128)
+    override val incomingPackets: SharedFlow<com.offlinemesh.app.data.transport.TransportPacket> = _incomingPackets.asSharedFlow()
 
     private val _isAdvertising = MutableStateFlow(false)
     override val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
@@ -237,10 +237,12 @@ class NearbyConnectionsTransport(
         }
     }
 
-    override suspend fun broadcastPacket(packet: ProtocolPacket): Boolean {
-        val connectedEndpoints = _connectedPeers.value.map { it.endpointId }
+    override suspend fun broadcastPacket(packet: ProtocolPacket, excludedEndpointId: String?): Boolean {
+        val connectedEndpoints = _connectedPeers.value
+            .map { it.endpointId }
+            .filter { excludedEndpointId == null || it != excludedEndpointId }
         if (connectedEndpoints.isEmpty()) {
-            Log.d(TAG, "Broadcast skipped: no connected endpoints")
+            Log.d(TAG, "Broadcast skipped: no target connected endpoints (excluded=$excludedEndpointId)")
             return false
         }
 
@@ -462,7 +464,7 @@ class NearbyConnectionsTransport(
                     Log.d(TAG, "HANDSHAKE_ACK_SENT endpointId=$endpointId")
                 }
 
-                _incomingPackets.emit(packet)
+                _incomingPackets.emit(com.offlinemesh.app.data.transport.TransportPacket(endpointId, packet))
             }
 
             PacketType.HANDSHAKE_ACK -> {
@@ -483,11 +485,11 @@ class NearbyConnectionsTransport(
                         } else it
                     }
                 }
-                _incomingPackets.emit(packet)
+                _incomingPackets.emit(com.offlinemesh.app.data.transport.TransportPacket(endpointId, packet))
             }
 
             else -> {
-                _incomingPackets.emit(packet)
+                _incomingPackets.emit(com.offlinemesh.app.data.transport.TransportPacket(endpointId, packet))
             }
         }
     }

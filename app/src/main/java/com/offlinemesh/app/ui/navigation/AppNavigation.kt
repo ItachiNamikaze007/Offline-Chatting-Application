@@ -10,6 +10,8 @@ import androidx.navigation.navArgument
 import com.offlinemesh.app.di.AppContainer
 import com.offlinemesh.app.ui.screens.chat.ChatDetailScreen
 import com.offlinemesh.app.ui.screens.home.HomeScreen
+import com.offlinemesh.app.ui.screens.splash.SplashScreen
+import com.offlinemesh.app.ui.screens.welcome.WelcomeScreen
 import com.offlinemesh.app.ui.viewmodel.ChatViewModel
 import com.offlinemesh.app.ui.viewmodel.HomeViewModel
 import com.offlinemesh.app.ui.viewmodel.NearbyViewModel
@@ -17,14 +19,35 @@ import com.offlinemesh.app.ui.viewmodel.SettingsViewModel
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-import com.offlinemesh.app.ui.screens.splash.SplashScreen
-import com.offlinemesh.app.ui.screens.welcome.WelcomeScreen
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.StateFlow
+
+data class PendingChatNavigation(
+    val conversationId: String,
+    val peerName: String,
+    val avatarColor: String
+)
 
 @Composable
 fun AppNavigation(
-    container: AppContainer
+    container: AppContainer,
+    pendingNavigation: StateFlow<PendingChatNavigation?>? = null,
+    onClearPendingNavigation: () -> Unit = {}
 ) {
     val navController = rememberNavController()
+
+    val pendingNav by (pendingNavigation?.collectAsState() ?: androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(null) })
+
+    LaunchedEffect(pendingNav) {
+        pendingNav?.let {
+            navController.navigate(
+                Screen.ChatDetail.createRoute(it.conversationId, it.peerName, it.avatarColor)
+            )
+            onClearPendingNavigation()
+        }
+    }
 
     val homeViewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(
@@ -32,7 +55,11 @@ fun AppNavigation(
             observeRecentConversationsUseCase = container.observeRecentConversationsUseCase,
             observeDiscoveredPeersUseCase = container.observeDiscoveredPeersUseCase,
             observeConnectedPeersUseCase = container.observeConnectedPeersUseCase,
-            communityRepository = container.communityRepository
+            observeKnownPeersUseCase = container.observeKnownPeersUseCase,
+            communityRepository = container.communityRepository,
+            identityRepository = container.identityRepository,
+            peerRepository = container.peerRepository,
+            chatRepository = container.chatRepository
         )
     )
 
@@ -52,7 +79,12 @@ fun AppNavigation(
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(
             getOrCreateIdentityUseCase = container.getOrCreateIdentityUseCase,
-            updateProfileUseCase = container.updateProfileUseCase
+            updateProfileUseCase = container.updateProfileUseCase,
+            clearAllMessagesUseCase = container.clearAllMessagesUseCase,
+            saveProfilePhotoUseCase = container.saveProfilePhotoUseCase,
+            removeProfilePhotoUseCase = container.removeProfilePhotoUseCase,
+            identityRepository = container.identityRepository,
+            chatRepository = container.chatRepository
         )
     )
 
@@ -122,9 +154,15 @@ fun AppNavigation(
                     observeMessagesUseCase = container.observeMessagesUseCase,
                     sendMessageUseCase = container.sendMessageUseCase,
                     retrySendMessageUseCase = container.retrySendMessageUseCase,
+                    deleteMessageUseCase = container.deleteMessageUseCase,
+                    deleteConversationUseCase = container.deleteConversationUseCase,
+                    markConversationAsReadUseCase = container.markConversationAsReadUseCase,
+                    toggleStarMessageUseCase = container.toggleStarMessageUseCase,
                     observeConnectedPeersUseCase = container.observeConnectedPeersUseCase,
                     observeDiscoveredPeersUseCase = container.observeDiscoveredPeersUseCase,
-                    connectPeerUseCase = container.connectPeerUseCase
+                    connectPeerUseCase = container.connectPeerUseCase,
+                    peerRepository = container.peerRepository,
+                    chatRepository = container.chatRepository
                 )
             )
 

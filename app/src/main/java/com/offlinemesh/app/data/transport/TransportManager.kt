@@ -5,10 +5,15 @@ import com.offlinemesh.app.data.transport.protocol.ProtocolPacket
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
+data class TransportPacket(
+    val incomingEndpointId: String?,
+    val packet: ProtocolPacket
+)
+
 interface TransportManager {
     val discoveredPeers: StateFlow<List<PeerDevice>>
     val connectedPeers: StateFlow<List<PeerDevice>>
-    val incomingPackets: SharedFlow<ProtocolPacket>
+    val incomingPackets: SharedFlow<TransportPacket>
     val isAdvertising: StateFlow<Boolean>
     val isDiscovering: StateFlow<Boolean>
 
@@ -25,5 +30,5 @@ interface TransportManager {
     fun disconnectPeer(endpointId: String)
 
     suspend fun sendPacket(packet: ProtocolPacket, destinationEndpointId: String? = null): Boolean
-    suspend fun broadcastPacket(packet: ProtocolPacket): Boolean
+    suspend fun broadcastPacket(packet: ProtocolPacket, excludedEndpointId: String? = null): Boolean
 }

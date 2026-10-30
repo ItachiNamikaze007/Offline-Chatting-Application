@@ -26,6 +26,9 @@ interface PeerDao {
     @Query("UPDATE peers SET lastSeen = :timestamp WHERE userId = :userId")
     suspend fun updateLastSeen(userId: String, timestamp: Long)
 
+    @Query("UPDATE peers SET avatarImagePath = :avatarImagePath, avatarVersion = :avatarVersion WHERE userId = :userId")
+    suspend fun updatePeerAvatar(userId: String, avatarImagePath: String?, avatarVersion: Long)
+
     @Query("DELETE FROM peers WHERE userId = :userId")
     suspend fun deletePeer(userId: String)
 }

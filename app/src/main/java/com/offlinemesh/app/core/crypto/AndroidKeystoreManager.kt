@@ -103,6 +103,26 @@ class AndroidKeystoreManager(
         return base64Encode(publicKey.encoded)
     }
 
+    fun getPrivateKey(): PrivateKey {
+        return getOrCreateKeyPair().private
+    }
+
+    fun getPublicKey(): PublicKey {
+        return getOrCreateKeyPair().public
+    }
+
+    fun encryptPayload(plaintext: String, recipientPublicKeyBase64: String): String {
+        val recipientPublicKey = decodePublicKey(recipientPublicKeyBase64)
+            ?: throw IllegalArgumentException("Invalid recipient public key")
+        return PayloadCrypto.encrypt(plaintext, recipientPublicKey, getPrivateKey())
+    }
+
+    fun decryptPayload(encryptedPayload: String, senderPublicKeyBase64: String): String {
+        val senderPublicKey = decodePublicKey(senderPublicKeyBase64)
+            ?: throw IllegalArgumentException("Invalid sender public key")
+        return PayloadCrypto.decrypt(encryptedPayload, senderPublicKey, getPrivateKey())
+    }
+
     fun decodePublicKey(base64PublicKey: String): PublicKey? {
         return try {
             val keyBytes = base64Decode(base64PublicKey)

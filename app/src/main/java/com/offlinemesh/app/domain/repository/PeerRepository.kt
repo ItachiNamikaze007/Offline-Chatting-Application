@@ -2,6 +2,8 @@ package com.offlinemesh.app.domain.repository
 
 import com.offlinemesh.app.core.model.PeerDevice
 import com.offlinemesh.app.data.local.entity.PeerEntity
+import com.offlinemesh.app.domain.mesh.MeshNode
+import com.offlinemesh.app.domain.mesh.RouteEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -20,4 +22,7 @@ interface PeerRepository {
     fun getAllKnownPeers(): Flow<List<PeerEntity>>
     suspend fun getPeer(userId: String): PeerEntity?
     suspend fun saveOrUpdatePeer(peer: PeerEntity)
+
+    fun getReachableMeshNodes(): List<MeshNode>
+    fun getRoute(userId: String): RouteEntry?
 }

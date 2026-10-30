@@ -20,18 +20,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Radar
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,10 +56,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.offlinemesh.app.data.local.entity.MessageEntity
 import com.offlinemesh.app.ui.components.AvatarBadge
 import com.offlinemesh.app.ui.components.DeliveryStatusIcon
 import com.offlinemesh.app.ui.components.EmptyStateView
+import com.offlinemesh.app.ui.components.GrayHeaderBrand
 import com.offlinemesh.app.ui.components.OFCBadge
 import com.offlinemesh.app.ui.components.PermissionHelper
 import com.offlinemesh.app.ui.components.PermissionRequesterCard
@@ -63,14 +68,13 @@ import com.offlinemesh.app.ui.screens.nearby.NearbyDevicesScreen
 import com.offlinemesh.app.ui.screens.settings.SettingsScreen
 import com.offlinemesh.app.ui.theme.MeshCyan
 import com.offlinemesh.app.ui.theme.MeshEmerald
+import com.offlinemesh.app.ui.viewmodel.ConversationItemUiModel
 import com.offlinemesh.app.ui.viewmodel.HomeViewModel
 import com.offlinemesh.app.ui.viewmodel.NearbyViewModel
 import com.offlinemesh.app.ui.viewmodel.SettingsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-import com.offlinemesh.app.ui.components.GrayHeaderBrand
 
 @Composable
 fun HomeScreen(
@@ -205,9 +209,10 @@ private fun ChatsTabContent(
     onOpenRadar: () -> Unit
 ) {
     val identity by homeViewModel.userIdentity.collectAsState()
-    val recentConversations by homeViewModel.recentConversations.collectAsState()
+    val conversations by homeViewModel.conversationItems.collectAsState()
     val connectedPeers by homeViewModel.connectedPeers.collectAsState()
     val discoveredPeers by homeViewModel.discoveredPeers.collectAsState()
+    val searchQuery by homeViewModel.searchQuery.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -264,7 +269,7 @@ private fun ChatsTabContent(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Identity Pill Card
+                // Identity Pill Card (live-updated immediately on profile change)
                 identity?.let { user ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -282,6 +287,7 @@ private fun ChatsTabContent(
                             AvatarBadge(
                                 name = user.displayName,
                                 avatarColorHex = user.avatarColorHex,
+                                imagePath = user.avatarImagePath,
                                 size = 42.dp
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -307,35 +313,63 @@ private fun ChatsTabContent(
             onPermissionsGranted = { nearbyViewModel.startScanning() }
         )
 
+        // Local Chat / Contact Search Bar
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            color = Color.Transparent
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { homeViewModel.onSearchQueryChanged(it) },
+                placeholder = { Text("Search chats, contacts, OFC IDs...", style = MaterialTheme.typography.bodyMedium) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = MeshCyan) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { homeViewModel.clearSearch() }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MeshCyan,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                )
+            )
+        }
+
         // Conversation List
-        if (recentConversations.isEmpty()) {
+        if (conversations.isEmpty()) {
             EmptyStateView(
                 icon = Icons.Default.ChatBubbleOutline,
-                title = "No Conversations Yet",
-                subtitle = "Discover and connect with nearby devices over radio to start messaging offline.",
+                title = if (searchQuery.isNotEmpty()) "No Matching Chats" else "No Conversations Yet",
+                subtitle = if (searchQuery.isNotEmpty()) "No conversations match '$searchQuery'." else "Discover and connect with nearby devices over radio to start messaging offline.",
                 modifier = Modifier.weight(1f)
             )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                contentPadding = PaddingValues(bottom = 80.dp)
             ) {
                 items(
-                    items = recentConversations,
+                    items = conversations,
                     key = { it.conversationId }
-                ) { message ->
-                    val isOnline = connectedPeers.any { it.userId == message.conversationId }
+                ) { item ->
                     ConversationRow(
-                        message = message,
-                        isPeerOnline = isOnline,
+                        item = item,
                         onClick = {
-                            val peerDisplayName = if (message.isOutgoing) message.recipientId else message.senderName
-                            // If discovered but not connected, trigger connect
-                            val discoveredPeer = discoveredPeers.find { it.userId == message.conversationId }
-                            if (discoveredPeer != null && !isOnline) {
+                            // If discovered but not connected, auto connect
+                            val discoveredPeer = discoveredPeers.find { it.userId == item.conversationId }
+                            if (discoveredPeer != null && !item.isConnected) {
                                 nearbyViewModel.connectPeer(discoveredPeer.endpointId)
                             }
-                            onNavigateToChat(message.conversationId, peerDisplayName, null)
+                            onNavigateToChat(item.conversationId, item.peerName, item.avatarColorHex)
                         }
                     )
                 }
@@ -346,13 +380,11 @@ private fun ChatsTabContent(
 
 @Composable
 private fun ConversationRow(
-    message: MessageEntity,
-    isPeerOnline: Boolean,
+    item: ConversationItemUiModel,
     onClick: () -> Unit
 ) {
-    val peerDisplayName = if (message.isOutgoing) message.recipientId else message.senderName
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val formattedTime = remember(message.timestamp) { timeFormat.format(Date(message.timestamp)) }
+    val formattedTime = remember(item.lastMessageTimestamp) { timeFormat.format(Date(item.lastMessageTimestamp)) }
 
     Row(
         modifier = Modifier
@@ -362,10 +394,11 @@ private fun ConversationRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         AvatarBadge(
-            name = peerDisplayName,
-            avatarColorHex = null,
+            name = item.peerName,
+            avatarColorHex = item.avatarColorHex,
+            imagePath = item.avatarImagePath,
             size = 50.dp,
-            isOnline = isPeerOnline
+            isOnline = item.isConnected
         )
 
         Spacer(modifier = Modifier.width(14.dp))
@@ -379,7 +412,7 @@ private fun ConversationRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = peerDisplayName,
+                    text = item.peerName,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
@@ -388,7 +421,8 @@ private fun ConversationRow(
                 Text(
                     text = formattedTime,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (item.unreadCount > 0) MeshCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (item.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
                 )
             }
 
@@ -396,19 +430,44 @@ private fun ConversationRow(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (message.isOutgoing) {
-                    DeliveryStatusIcon(status = message.status)
-                    Spacer(modifier = Modifier.width(4.dp))
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (item.isOutgoing) {
+                        DeliveryStatusIcon(status = item.lastMessageStatus)
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = item.lastMessageContent,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (item.unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (item.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+
+                // Unread Count Badge
+                if (item.unreadCount > 0) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MeshCyan)
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (item.unreadCount > 99) "99+" else item.unreadCount.toString(),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                            color = Color.Black
+                        )
+                    }
+                }
             }
         }
     }

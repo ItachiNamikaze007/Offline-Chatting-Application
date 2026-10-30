@@ -4,6 +4,9 @@ import com.offlinemesh.app.core.model.PeerDevice
 import com.offlinemesh.app.data.local.dao.PeerDao
 import com.offlinemesh.app.data.local.entity.PeerEntity
 import com.offlinemesh.app.data.transport.TransportManager
+import com.offlinemesh.app.domain.mesh.MeshNode
+import com.offlinemesh.app.domain.mesh.RouteEntry
+import com.offlinemesh.app.domain.mesh.RoutingManager
 import com.offlinemesh.app.domain.repository.PeerRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +18,8 @@ import kotlinx.coroutines.launch
 
 class PeerRepositoryImpl(
     private val transportManager: TransportManager,
-    private val peerDao: PeerDao
+    private val peerDao: PeerDao,
+    private val routingManager: RoutingManager
 ) : PeerRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -74,5 +78,13 @@ class PeerRepositoryImpl(
 
     override suspend fun saveOrUpdatePeer(peer: PeerEntity) {
         peerDao.insertOrUpdatePeer(peer)
+    }
+
+    override fun getReachableMeshNodes(): List<MeshNode> {
+        return routingManager.getReachableMeshNodes()
+    }
+
+    override fun getRoute(userId: String): RouteEntry? {
+        return routingManager.getRoute(userId)
     }
 }

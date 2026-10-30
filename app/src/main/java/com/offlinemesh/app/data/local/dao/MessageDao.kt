@@ -51,6 +51,27 @@ interface MessageDao {
     """)
     fun getRecentConversations(): Flow<List<MessageEntity>>
 
+    @Query("DELETE FROM messages WHERE messageId = :messageId")
+    suspend fun deleteMessageById(messageId: String)
+
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun clearConversation(conversationId: String)
+
+    @Query("DELETE FROM messages")
+    suspend fun clearAllMessages()
+
+    @Query("UPDATE messages SET isRead = 1 WHERE conversationId = :conversationId AND isRead = 0")
+    suspend fun markConversationAsRead(conversationId: String)
+
+    @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isRead = 0 AND isOutgoing = 0")
+    fun getUnreadCountForConversation(conversationId: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM messages WHERE isRead = 0 AND isOutgoing = 0")
+    fun getTotalUnreadCount(): Flow<Int>
+
+    @Query("UPDATE messages SET isStarred = :isStarred WHERE messageId = :messageId")
+    suspend fun setStarred(messageId: String, isStarred: Boolean)
+
+    @Query("SELECT * FROM messages WHERE content LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    fun searchMessages(query: String): Flow<List<MessageEntity>>
 }
